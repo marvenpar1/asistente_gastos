@@ -99,6 +99,13 @@ docker run -p 9000:8080 --env-file .env asistente-gastos:latest
 curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" \
   -H "Content-Type: application/json" \
   -d '{"message":{"text":"gasté 20000 en empanadas","chat":{"id":12345}}}'
+
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "body": "{\"message\":{\"text\":\"gasté 10 euros en chicles\",\"chat\":{\"id\":12345}}}"
+}'
+
 ```
 
 ---

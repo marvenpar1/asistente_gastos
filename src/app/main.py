@@ -28,6 +28,8 @@ def lambda_handler(event, context):
         message = body.get("message", {}).get("text", "")
         chat_id = body.get("message", {}).get("chat", {}).get("id")
 
+        logger.info("Body", body)
+
         logger.info(f"Mensaje recibido: {message}")
         logger.info(f"Chat ID: {chat_id}")
         logger.info(f"Tipo de Chat ID: {type(chat_id)}")
