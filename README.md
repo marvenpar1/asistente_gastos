@@ -205,6 +205,14 @@ aws lambda update-function-code \
   --region <AWS_REGION>
 ```
 
+```bash
+# Permiso
+chmod +x deploy.sh
+
+# Ejecutar
+./deploy.sh v8
+```
+
 ---
 
 ## 🤖 Integración del Webhook de Telegram con AWS Lambda

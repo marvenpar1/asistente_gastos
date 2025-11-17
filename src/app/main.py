@@ -54,7 +54,8 @@ def lambda_handler(event, context):
             logger.info("Fecha agregada automáticamente: %s", movimiento["fecha"])
 
         # 4️⃣ Quién (usar CHAT_ID_MARTA como env var)
-        if str(chat_id) == os.environ.get("CHAT_ID_MARTA", ""):
+        # if str(chat_id) == os.environ.get("CHAT_ID_MARTA", ""):
+        if str(chat_id) == '6521789418':
             movimiento["quien"] = "Marta"
         else:
             movimiento["quien"] = "User2"
