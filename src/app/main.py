@@ -5,77 +5,96 @@ from datetime import date
 
 import requests
 
-from .llm import parse_gasto
-from .sheets import append_gasto
+from .llm import parse_movimiento
+from .sheets import append_gasto  # luego lo puedes renombrar a append_movimiento
 
-# === Configuración de logging ===
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "NOT_SET")
 
+
 def lambda_handler(event, context):
-    """
-    Handler principal invocado por AWS Lambda.
-    """
     logger.info("=== Lambda handler iniciado ===")
-    logger.info(f"Entorno cargado: TELEGRAM_TOKEN={'SET' if TELEGRAM_TOKEN != 'NOT_SET' else 'NOT_SET'}")
-    logger.info(f"Evento recibido: {json.dumps(event)[:500]}")  # Limita a 500 chars
+    logger.info(
+        "Entorno cargado: TELEGRAM_TOKEN=%s",
+        "SET" if TELEGRAM_TOKEN != "NOT_SET" else "NOT_SET",
+    )
+    logger.info("Evento recibido: %s", json.dumps(event)[:500])
 
     try:
-        # 1️⃣ Parsear el body que viene de Telegram
+        if TELEGRAM_TOKEN == "NOT_SET":
+            logger.error("TELEGRAM_BOT_TOKEN no está definido en las variables de entorno")
+
+        # 1️⃣ Parsear el body que viene de Telegram (Function URL -> event["body"])
         body = json.loads(event.get("body", "{}"))
         message = body.get("message", {}).get("text", "")
-        chat_id = body.get("message", {}).get("chat", {}).get("id")
+        chat = body.get("message", {}).get("chat", {}) or {}
+        chat_id = chat.get("id")
 
-        logger.info("Body", body)
-
-        logger.info(f"Mensaje recibido: {message}")
-        logger.info(f"Chat ID: {chat_id}")
-        logger.info(f"Tipo de Chat ID: {type(chat_id)}")
+        logger.info("Body: %s", body)
+        logger.info("Mensaje recibido: %s", message)
+        logger.info("Chat ID: %s (tipo: %s)", chat_id, type(chat_id))
 
         if not message or not chat_id:
             logger.warning("No se encontró mensaje o chat_id en el evento")
-            return {"statusCode": 200, "body": "No message to process"}
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"ok": True, "skipped": True}),
+            }
 
-        # 2️⃣ Parsear con Gemini
-        logger.info("Invocando parse_gasto()...")
-        gasto = parse_gasto(message)
-        logger.info(f"Resultado parseo: {gasto}")
+        # 2️⃣ Parsear con LLM: ahora queremos tipo = gasto/ingreso
+        logger.info("Invocando parse_movimiento()...")
+        movimiento = parse_movimiento(message)
+        logger.info("Resultado parseo: %s", movimiento)
 
-        # 3️⃣ Agregar fecha si no existe
-        if not gasto.get("fecha"):
-            gasto["fecha"] = date.today().isoformat()
-            logger.info(f"Fecha agregada automáticamente: {gasto['fecha']}")
+        # 3️⃣ Asegurar fecha
+        if not movimiento.get("fecha"):
+            movimiento["fecha"] = date.today().isoformat()
+            logger.info("Fecha agregada automáticamente: %s", movimiento["fecha"])
 
-        if chat_id == 641045556:
-            gasto["quien"] = "User1"
+        # 4️⃣ Quién (usar CHAT_ID_MARTA como env var)
+        if str(chat_id) == os.environ.get("CHAT_ID_MARTA", ""):
+            movimiento["quien"] = "Marta"
         else:
-            gasto["quien"] = "User2"
+            movimiento["quien"] = "User2"
 
-        # 4️⃣ Guardar en Google Sheets
+        # 5️⃣ Guardar en Google Sheets (incluyendo tipo)
         logger.info("Invocando append_gasto()...")
-        append_gasto(gasto)
-        logger.info("✅ Gasto registrado en Google Sheets")
+        append_gasto(movimiento)
+        logger.info("✅ Movimiento registrado en Google Sheets")
 
-        # 5️⃣ Responder en Telegram
+        # 6️⃣ Responder en Telegram
+        tipo = movimiento.get("tipo", "gasto")
+        es_ingreso = (str(tipo).lower() == "ingreso")
+
+        titulo = "Ingreso registrado ✅" if es_ingreso else "Gasto registrado ✅"
+        signo = "+" if es_ingreso else "-"
+
         reply = (
-            f"Registrado ✅\n"
-            f"{gasto['monto']} COP\n"
-            f"Categoría: {gasto['categoria']}\n"
-            f"Descripción: {gasto['descripcion']}\n"
-            f"Fecha: {gasto['fecha']}\n"
-            f"Quién: {gasto['quien']}"
+            f"{titulo}\n"
+            f"{signo}{movimiento['monto']} €\n"
+            f"Categoría: {movimiento.get('categoria', 'N/A')}\n"
+            f"Descripción: {movimiento.get('descripcion', 'N/A')}\n"
+            f"Fecha: {movimiento['fecha']}\n"
+            f"Quién: {movimiento['quien']}"
         )
+
         logger.info("Enviando respuesta a Telegram...")
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": chat_id, "text": reply},
-        )
-        logger.info("✅ Mensaje enviado a Telegram")
+        if TELEGRAM_TOKEN != "NOT_SET":
+            requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                json={"chat_id": chat_id, "text": reply},
+                timeout=5,
+            )
+        else:
+            logger.error("No se envía mensaje a Telegram porque falta TELEGRAM_BOT_TOKEN")
 
-        return {"statusCode": 200, "body": "ok"}
+        logger.info("✅ Mensaje enviado a Telegram (o saltado por falta de token)")
 
-    except Exception as e:
+        return {"statusCode": 200, "body": json.dumps({"ok": True})}
+
+    except Exception:
         logger.exception("❌ Error en lambda_handler")
-        return {"statusCode": 200, "body": "error"}
+        # Telegram solo necesita 200; le devolvemos error lógico pero HTTP 200
+        return {"statusCode": 200, "body": json.dumps({"ok": False, "error": True})}

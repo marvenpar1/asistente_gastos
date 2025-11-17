@@ -322,4 +322,3 @@ usuario → mensaje → webhook → Lambda → Gemini → Sheets → respuesta a
 3. Añadir un pipeline **CI/CD con GitHub Actions** para build + push + deploy automático.
 4. Implementar **monitoring y alerting** en CloudWatch.
 
-

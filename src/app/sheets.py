@@ -19,13 +19,24 @@ def append_gasto(gasto):
     creds = get_google_credentials()
     service = build("sheets", "v4", credentials=creds)
 
-    values = [[gasto["fecha"], gasto["monto"], gasto["categoria"], gasto["descripcion"], gasto["quien"]]]
+    # Orden recomendado:
+    # Fecha | Quién | Tipo | Categoría | Descripción | Monto
+    values = [[
+        gasto.get("fecha"),
+        gasto.get("quien"),
+        gasto.get("tipo"),        # 👈 antes no lo guardabas
+        gasto.get("categoria"),
+        gasto.get("descripcion"),
+        gasto.get("monto"),
+    ]]
+
     body = {"values": values}
 
     SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+
     service.spreadsheets().values().append(
         spreadsheetId=SHEET_ID,
-        range="registros!A:D",
+        range="registros!A:F",    # 👈 ahora 6 columnas
         valueInputOption="USER_ENTERED",
         body=body,
     ).execute()
